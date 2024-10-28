@@ -38,6 +38,7 @@ from sd_core.cache import cache_user_credentials, get_credentials, add_password,
 from sd_core.launch_start import launch_app, delete_launch_app, set_autostart_registry
 from sd_qt.sd_desktop.dashboard import Dashboard
 from sd_qt.sd_desktop.onboarding import Onboarding
+from sd_qt.sd_desktop.theme_manager import ThemeManager
 
 # Determine development mode
 development = "1"  # or "1" for development
@@ -162,11 +163,62 @@ class MainWindow(QMainWindow):
         self.onboarding_status = QSettings("ralvie.ai", "Sundial")
         self.settings = retrieve_settings()
         self.setupUi(self)
-        self.current_theme = "light"
+        self.theme_manager = ThemeManager.get_instance()
         self.loginSuccess.connect(self.process_login_response)
         self.goToCompanyPageSignal.connect(self.go_to_company_page)
         # Connect system palette change signal to theme change handler
         app.paletteChanged.connect(self.handle_palette_change)
+
+        self.setup_system_tray()
+
+    def setup_system_tray(self):
+        """Initialize the system tray icon and menu."""
+        tray_icon = QIcon(os.path.join(folder_path, "Sundial_logo.svg"))
+        self.tray_icon = QSystemTrayIcon(tray_icon, self)
+        self.tray_icon.setToolTip("Sundial Application")
+
+        # Create the menu for the system tray
+        tray_menu = QMenu()
+        open_action = QAction("Open", self)
+        open_action.triggered.connect(self.show_window)
+        tray_menu.addAction(open_action)
+
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(self.quit_application)
+        tray_menu.addAction(quit_action)
+
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+
+        # Connect the activation signal to handle clicks
+        self.tray_icon.activated.connect(self.on_tray_icon_activated)
+
+    def closeEvent(self, event):
+        """Override the close event to minimize to the system tray instead of closing."""
+        event.ignore()  # Ignore the default close event
+        self.hide()  # Minimize to tray
+        self.tray_icon.showMessage(
+            "Sundial Application",
+            "Application minimized to the system tray. Double-click the tray icon to restore.",
+            QSystemTrayIcon.Information,
+            2000
+        )
+
+    def show_window(self):
+        """Restore the main window."""
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.showNormal()
+
+    def quit_application(self):
+        """Quit the application gracefully."""
+        QtWidgets.QApplication.quit()
+
+    def on_tray_icon_activated(self, reason):
+        """Handle the tray icon activation event."""
+        if reason == QSystemTrayIcon.Trigger:
+            self.show_window()
 
     def load_custom_font(self):
         # Load the custom font from the specified path
@@ -678,6 +730,7 @@ class MainWindow(QMainWindow):
     def handle_palette_change(self):
         """Handle system theme change dynamically."""
         print("System theme changed!")
+        self.theme_manager.set_theme_based_on_system(self)
         self.update_background_image()
         self.update_app_layout(self.stacked_layout.currentIndex())
         self.onboard_page.toggle_theme()
@@ -752,15 +805,6 @@ class MainWindow(QMainWindow):
             else:
                 # Show the onboarding screen only once
                 self.app_layout.setCurrentWidget(self.onboard_page)
-            # user_details()
-            # self.clear_activities()
-            # self.add_dynamic_blocks()
-            # clear_credentials("SD_KEYS")
-            # self.loader_.setVisible(False)
-            # QCoreApplication.processEvents()
-            # self.update_settings()
-            # self.update_theme()
-            #
 
         elif response_data["code"] == 'RCW00001':
             print(response_data)

@@ -15,7 +15,9 @@ from qt_material import apply_stylesheet
 
 from sd_core.cache import cache_user_credentials
 from sd_qt.sd_desktop.checkBox import CustomCheckBox
+from sd_qt.sd_desktop.theme_manager import ThemeManager
 from sd_qt.sd_desktop.toggleSwitch import SwitchControl
+from sd_qt.sd_desktop.util import credentials, add_settings, retrieve_settings
 
 host = "http://localhost:7600/api"
 
@@ -44,9 +46,17 @@ class EventManager:
     def __init__(self):
         self.scrollAreaWidgetContents = None
         self.current_color_index = 0
+        self.theme_manager = ThemeManager.get_instance()
+
+        # Connect to the theme change signal
+        self.theme_manager.theme_changed.connect(self.on_theme_changed)
+
         QApplication.instance().paletteChanged.connect(self.handle_palette_change)
-        # self.layout = QVBoxLayout()  # Initialize the layout for event widgets
-        # self.layout.setContentsMargins(20, 20, 20, 20)
+        self.theme_manager.set_theme_based_on_system(QApplication.instance().activeWindow())
+
+    def on_theme_changed(self, theme_name):
+        """Reapply styles when the theme changes."""
+        self.update_events_style()
 
     def truncate_text(self, text, max_words):
         return text[:max_words] + "..." if len(text) > max_words else text
@@ -116,22 +126,20 @@ class EventManager:
                     if label:
                         label.setStyleSheet("background:transparent;")
 
-    def is_light_theme(self):
-        """Check if the current theme is light."""
-        current_palette = QApplication.palette()
-        return current_palette.color(QPalette.ColorRole.Window).lightness() > 128
-
     def get_dynamic_block_stylesheet(self, light_color, dark_color):
         """Generate a dynamic stylesheet based on the current theme."""
-        if not self.is_light_theme:
-            color = dark_color
-            border_color = dark_colors_border.get(dark_color, "#000000")  # Default to black if not found
-            text_color = "white"
-        else:
+        if self.theme_manager.current_theme == "light":
+            # Light theme settings
             color = light_color
             border_color = light_colors_border.get(light_color, "#000000")  # Default to black if not found
             text_color = "black"
+        else:
+            # Dark theme settings
+            color = dark_color
+            border_color = dark_colors_border.get(dark_color, "#000000")  # Default to black if not found
+            text_color = "white"
 
+        # Return the generated stylesheet string
         return (
             ".QWidget {"
             f"background-color: {color};"
@@ -224,7 +232,7 @@ class EventManager:
         event_widget.setFixedSize(530, 60)  # Adjusted size for internal padding
 
         # Set theme color
-        is_light_theme = self.is_light_theme()
+        is_light_theme = self.theme_manager.current_theme == "light"
         event_widget.setStyleSheet(f"""
             background-color: {color['light_color'] if is_light_theme else color['dark_color']};
             border-radius: 10px;
@@ -287,9 +295,12 @@ class EventManager:
 class Dashboard(QWidget):
     def __init__(self,main_reference,settings,darkTheme,LightTheme,parent=None):
         super().__init__(parent)
+        self.To_time = QTimeEdit()
+        self.From_time = QTimeEdit()
         self.darkTheme = darkTheme
         self.lightTheme = LightTheme
         self.main_reference = main_reference
+
         self.settings = settings
         self.selected_button = None
         self.user_override_theme = False
@@ -303,6 +314,12 @@ class Dashboard(QWidget):
 
         self.horizontalLayout = QHBoxLayout(self)
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
+
+        self.theme_manager = ThemeManager.get_instance()
+        self.theme_manager.theme_changed.connect(self.on_theme_changed)
+        self.theme_manager.set_theme_based_on_system(self)
+
+
         self.setupSidebar(darkTheme)
         self.horizontalLayout.addWidget(self.sidebar)
 
@@ -312,44 +329,31 @@ class Dashboard(QWidget):
         self.setWindowTitle("Dashboard")
         self.setFixedSize(800, 600)
 
-        self.apply_theme_based_on_palette()
-        QApplication.instance().paletteChanged.connect(self.handle_palette_change)
-
         self.activities_timer = QTimer(self)
         self.activities_timer.setInterval(60000)
         self.activities_timer.timeout.connect(self.refresh_activities)
+
+
+
+    def on_theme_changed(self, theme):
+        """Handle theme change and update styles."""
+        print(f"Theme changed to: {theme}")  # Debug print to confirm the slot is executed
+        self.update_app_layout()
+        self.refresh_widget_styles()
+        self.repaint()
+
+    def refresh_widget_styles(self):
+        """Refresh styles for widgets after a theme change."""
+        self.setAutoFillBackground(True)
+        self.update()
 
     def refresh_activities(self):
         if self.stackedWidget.currentIndex() == 0:
             self.event_manager.add_dynamic_blocks()
 
     def handle_palette_change(self):
-        self.apply_theme_based_on_palette()
-
-    def apply_theme_based_on_palette(self):
-        if self.user_override_theme:
-            return
-
-        current_palette = QApplication.instance().palette()
-        is_light_theme = current_palette.color(QPalette.ColorRole.Window).lightness() > 128
-        new_theme = 'light_blue.xml' if is_light_theme else 'dark_blue.xml'
-        apply_stylesheet(QApplication.instance(), theme=new_theme)
-        self.refresh_widget_styles()
-
-    def toggle_theme(self):
-        self.user_override_theme = not self.user_override_theme
-        current_palette = QApplication.instance().palette()
-        is_light_theme = current_palette.color(QPalette.ColorRole.Window).lightness() > 128
-        new_theme = 'dark_blue.xml' if is_light_theme else 'light_blue.xml'
-        apply_stylesheet(QApplication.instance(), theme=new_theme)
-
-        self.refresh_widget_styles()
-
-    def refresh_widget_styles(self):
-        self.sidebar.setAutoFillBackground(True)
-        self.stackedWidget.setAutoFillBackground(True)
-        self.sidebar.update()
-        self.stackedWidget.update()
+        """Handle system theme change dynamically."""
+        self.theme_manager.set_theme_based_on_system(self)
         self.update_app_layout()
 
     def createButton(self, text, icon_path, top_position, folder_path):
@@ -520,6 +524,7 @@ class Dashboard(QWidget):
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setWidget(self.event_manager.scrollAreaWidgetContents)
         self.event_manager.add_dynamic_blocks()
+        self.update_app_layout()
         return self.Activities
 
     def GeneralSettingsPage(self):
@@ -543,11 +548,12 @@ class Dashboard(QWidget):
         # Version and Update Section
         self.setup_version_section()
 
+        self.load_settings()
 
         return self.GeneralSettings
 
         # Retrieve and set initial settings
-        # self.load_settings()
+
 
     def setup_startup_section(self):
         self.startup = QWidget(parent=self.GeneralSettings)
@@ -572,7 +578,7 @@ class Dashboard(QWidget):
         self.startup_checkbox.setGeometry(QRect(490, 30, 80, 21))
 
         # Connect checkbox state change
-        # self.startup_checkbox.stateChanged.connect(self.startup_status)
+        self.startup_checkbox.stateChanged.connect(self.startup_status)
 
     def setup_idletime_section(self):
         self.idletime = QWidget(parent=self.GeneralSettings)
@@ -597,7 +603,7 @@ class Dashboard(QWidget):
         self.idletime_checkbox.setGeometry(QRect(490, 30, 100, 21))
 
         # Connect checkbox state change
-        # self.idletime_checkbox.stateChanged.connect(self.idletime_status)
+        self.idletime_checkbox.stateChanged.connect(self.idletime_status)
 
     def setup_version_section(self):
         self.Version_2 = QWidget(parent=self.GeneralSettings)
@@ -653,11 +659,84 @@ class Dashboard(QWidget):
     def hide_toast_message(self):
         self.startup_toast_message.setVisible(False)
 
-    # def load_settings(self):
-    #     settings = retrieve_settings()
-    #     self.startup_checkbox.setChecked(settings.get('launch', False))
-    #     self.idletime_checkbox.setChecked(settings.get('idle_time', False))
-    #     self.update_version_display()
+    def load_settings(self):
+        settings = retrieve_settings()
+        self.startup_checkbox.setChecked(settings.get('launch', False))
+        self.idletime_checkbox.setChecked(settings.get('idle_time', False))
+
+
+    def startup_status(self):
+        status = ""
+        if self.startup_checkbox.isChecked():  # Removed redundant check for `idle_time_checkbox`
+            self.startup_checkbox.setChecked(True)
+            status = "start"
+            # self.show_toast_message("launch on start has been enabled")
+        else:
+            self.startup_checkbox.setChecked(False)
+            status = "stop"
+            # self.show_toast_message("launch on start has been disabled")
+        self.launch_on_start(status)
+
+    def idletime_status(self):
+        if self.idletime_checkbox.isChecked():  # Removed redundant check for `idle_time_checkbox`
+            status = "start"
+            self.idletime_checkbox.setChecked(True)
+        else:
+            status = "stop"
+            self.idletime_checkbox.setChecked(False)
+            # self.show_toast_message("idletime has been disabled")
+        self.enable_idletime(status)
+
+    def launch_on_start(self, status):
+        params = {"status": status}
+
+        # Get the credentials
+        creds = credentials()  # Assuming this function returns a dictionary with a token
+        if creds and "token" in creds:
+            sundial_token = creds["token"]
+
+            try:
+                response = requests.get(
+                    host + "/0/launchOnStart",
+                    headers={"Authorization": f"Bearer {sundial_token}"},
+                    params=params
+                )
+                if response.status_code == 200:
+                    print("Launch on start updated successfully")
+                else:
+                    print(f"Failed to update idle time: {response.status_code}, {response.text}")
+            except requests.RequestException as e:
+                print(f"An error occurred while sending the request: {e}")
+        else:
+            print("No valid credentials found")
+
+    def enable_idletime(self, status):
+        params = {"status": status}
+
+        # Get the credentials
+        creds = credentials()  # Assuming this function returns a dictionary with a token
+        if creds and "token" in creds:
+            sundial_token = creds["token"]
+
+            try:
+                # Send the request with query parameters and the authorization token
+                response = requests.get(
+                    host + "/0/idletime",
+                    headers={"Authorization": f"Bearer {sundial_token}"},
+                    params=params
+                )
+
+                # Handle the response
+                if response.status_code == 200:
+                    print("Idle time updated successfully")
+                else:
+                    print(f"Failed to update idle time: {response.status_code}, {response.text}")
+            except requests.RequestException as e:
+                print(f"An error occurred while sending the request: {e}")
+        else:
+            print("No valid credentials found")
+
+
     #
     # def version(self):
     #     settings = retrieve_settings()
@@ -828,27 +907,25 @@ class Dashboard(QWidget):
         self.Reset.setText("Reset")
         self.Save.setText("Save")
 
-        # self.Schedule_enabler_checkbox.stateChanged.connect(
-            # self.toggle_schedule_visibility)
+        self.schedule_settings()
 
-        # self.day_widget.hide()
-        # retrieve_settings()
-        # self.Schedule_enabler_checkbox.setChecked(settings.get('schedule', False))
-        # if settings.get('schedule', False):
-        #     self.day_widget.hide()
-        # else:
-        #     self.day_widget.show()
-
-        # self.Schedule_enabler_checkbox.stateChanged.connect(
-        #     self.toggle_schedule_visibility)
-        #
-        # self.updateCheckboxStates(settings.get('weekdays_schedule', {}))
-        # self.update_save_button_state()
-
-        # Set up event filter to detect clicks outside the info_message
+        self.Schedule_enabler_checkbox.stateChanged.connect(
+            self.toggle_schedule_visibility)
         self.Schedule.installEventFilter(self)
 
         return self.Schedule
+
+    def toggle_schedule_visibility(self):
+        if self.Schedule_enabler_checkbox.isChecked():
+            self.Schedule_enabler_checkbox.setChecked(True)
+            self.day_widget.setVisible(True)
+        else:
+            self.day_widget.setVisible(False)
+            self.Schedule_enabler_checkbox.setChecked(False)
+        threading.Thread(target=self.run_add_settings).start()
+
+    def run_add_settings(self):
+        add_settings('schedule', self.Schedule_enabler_checkbox.isChecked())
 
     def resetSchedule(self):
         global week_schedule
@@ -988,6 +1065,10 @@ class Dashboard(QWidget):
             for day in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
         )
 
+    def save_schedule(self, schedule):
+        add_settings('weekdays_schedule', schedule)
+        self.update_save_button_state()
+
     def saveSchedule(self):
         if self.check_all_days_false():
             return  # Avoid saving if all checkboxes are unchecked
@@ -1057,182 +1138,188 @@ class Dashboard(QWidget):
         self.company_value = QLabel(parent=self.profile_container)
         self.company_value.setGeometry(QtCore.QRect(220, 110, 500, 20))
         self.company_value.setFont(font)
-        # QTimer.singleShot(0,self.load_user_details)
+        QTimer.singleShot(0,self.load_user_details)
 
         return self.userProfile_widget
 
+    def ellipsis(self, value, length):
+        if len(value) > length:
+            return value[:length] + "..."
+        else:
+            return value
+
+
+    def load_user_details(self):
+        """Load and display the logged-in user's details."""
+        # Fetch user details from the storage or API (you can adjust this as needed)
+        user_details = credentials()
+
+        if not user_details:
+            # If user details are not available, clear the fields
+            self.clear_user_detail_fields()
+            return
+
+        # Helper function to update text and tooltip
+        def update_field(widget, text, max_length=30):
+            if len(text) > max_length:
+                widget.setText(self.ellipsis(text, max_length))
+                widget.setToolTip(text)
+            else:
+                widget.setText(text)
+                widget.setToolTip("")  # Clear tooltip if not needed
+
+        # Update the UI components with the fetched user details
+        update_field(self.first_name_value, user_details.get('firstname', ''))
+        update_field(self.email_value, user_details.get('email', ''))
+        update_field(self.company_value, user_details.get('companyName', ''))
+
+        # Update phone number separately as it does not have a tooltip logic
+        self.mobile_value.setText(user_details.get('phone', ''))
+
+        # Trigger an update for all fields to ensure the UI refreshes
+        self.first_name_value.update()
+        self.email_value.update()
+        self.mobile_value.update()
+        self.company_value.update()
+
+    def clear_user_detail_fields(self):
+        """Clear user detail fields in the UI."""
+        self.first_name_value.setText("")
+        self.first_name_value.setToolTip("")
+        self.email_value.setText("")
+        self.email_value.setToolTip("")
+        self.mobile_value.setText("")
+        self.company_value.setText("")
+        self.company_value.setToolTip("")
+
+
+    def schedule_settings(self):
+        settings = retrieve_settings()
+        self.updateCheckboxStates(settings.get('weekdays_schedule', {}))
+        self.Schedule_enabler_checkbox.setChecked(
+            settings.get('schedule', False))
+        if settings.get('schedule'):
+            self.day_widget.show()
+        else:
+            self.day_widget.hide()
+
     def update_app_layout(self):
         """Update the background based on the current page index and theme."""
-        current_palette = QApplication.palette()
         page_index = self.stackedWidget.currentIndex()  # Get the current page index
         print(f"Current page index: {page_index}")
 
-        # Determine if it's a light or dark theme based on the background color
-        is_light_theme = current_palette.color(QPalette.ColorRole.Window).lightness() > 128
+        # Determine if it's a light or dark theme based on the current theme in ThemeManager
+        is_light_theme = self.theme_manager.current_theme == "light"
 
-        # Define styles based on theme
+        # Define styles based on the theme
         if is_light_theme:
-
-            # Set styles based on the current page index
-            if page_index == 0:
-                self.Date_display.setStyleSheet("""
-                                                    background-color: #EFEFEF;
-                                                    border-top-left-radius: 10px;
-                                                    border-top-right-radius: 10px;
-                                                    border-bottom-left-radius: 0px;
-                                                    border-bottom-right-radius: 0px;
-                                                """)
-                self.scrollArea.setStyleSheet(
-                    "border:None; background-color:#F9F9F9;border-bottom-left-radius: 10px;border-bottom-right-radius: 10px;")
-                self.Day.setStyleSheet("background: transparent")
-                self.scrollArea.verticalScrollBar().setStyleSheet("""
-                            QScrollBar:vertical {
-                                background: #F9F9F9;
-                                width: 5px;
-                                margin: 0px 0px 0px 0px;
-                                border-radius: 5px;
-                            }
-                            QScrollBar::handle:vertical {
-                                background: #B0B0B0;
-                                min-height: 20px;
-                                border-radius: 5px;
-                            }
-                            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                                height: 0px;
-                                width: 0px;
-                            }
-                            QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
-                                background: none;
-                            }
-                            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                                background: none;
-                            }
-                        """)
-            elif page_index == 1:
-                self.GeneralSettings_header.setStyleSheet(
-                    "background-color:#010101;rgba(248, 248, 248, 0.8)")
-                self.startup_checkbox.set_circle_color("#FFFFFF")
-                self.startup_label.setStyleSheet("background: transparent")
-                self.idletime_checkbox.set_circle_color("#FFFFFF")
-                self.startup.setStyleSheet(
-                    "border-radius: 10px; background-color:#F9F9F9;")
-                self.idletime.setStyleSheet(
-                    "border-radius: 10px; background-color:#F9F9F9;")
-                self.Version_2.setStyleSheet(
-                    "border-radius: 10px; background-color:#F9F9F9;")
-                self.current_version.setText(
-                    f'<span style="color: rgba(71, 75, 79, 1);">Current app version: </span>'
-                    f'<span style="color: black;background:transparent;">2.0.0_beta</span>'
-                )
-            elif page_index == 2:
-                self.Schedule_enabler.setStyleSheet(f"""
-                            border-top-left-radius: 10px;
-                            border-top-right-radius: 10px;
-                            border-bottom-left-radius: 0px;
-                            border-bottom-right-radius: 0px; background-color:#F9F9F9;""")
-                self.day_widget.setStyleSheet(f"""/QWidget {{
-                                border-top-left-radius: 0px;
-                                border-top-right-radius: 0px;
-                                border-bottom-left-radius: 10px;
-                                border-bottom-right-radius: 10px;  background-color: #F9F9F9;
-                                }}
-                            """)
-            elif page_index == 3:
-                self.profile_container.setStyleSheet(
-                    "border-radius: 10px; background-color:#F9F9F9;")
-                self.profile_image.setFixedSize(100, 100)
-                # user_img = os.path.join(folder_path, "user_img.svg")
-                self.profile_image.setStyleSheet(f"""
-                                                border-radius: 50%;
-                                                background-color: rgba(255, 255, 255, 1);  /* Transparent background */
-                                                background-position: center; /* Center the image */
-                                                background-repeat: no-repeat; /* Do not repeat the image */
-                                            """)
-
+            # Light theme styles
+            print("Hello")
+            self.apply_styles_for_page(page_index, "#EFEFEF", "#F9F9F9", "black", "#FFFFFF")
         else:
+            print("world")
+            # Dark theme styles
+            self.apply_styles_for_page(page_index, "#171717", "#101010", "white", "#010101")
 
-            # Set styles based on the current page index for dark theme
-            if page_index == 0:
-                self.Date_display.setStyleSheet("""
-                            background-color: #171717;
-                            border-top-left-radius: 10px;
-                            border-top-right-radius: 10px;
-                            border-bottom-left-radius: 0px;
-                            border-bottom-right-radius: 0px;
-                        """)
+        # Force a repaint to make sure all changes are visible
+        self.repaint()
 
-                self.scrollArea.setStyleSheet(
-                    "border:None; background-color:#101010;border-bottom-left-radius: 10px;border-bottom-right-radius: 10px;")
-                self.Day.setStyleSheet("background: transparent")
-                self.scrollArea.verticalScrollBar().setStyleSheet("""
-                                    QScrollBar:vertical {
-                                        width: 5px;
-                                        margin: 0px 0px 0px 0px;
-                                        border-radius: 5px;
-                                    }
-                                    QScrollBar::handle:vertical {
-                                        background: #B0B0B0;
-                                        min-height: 20px;
-                                        border-radius: 5px;
-                                    }
-                                    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                                        height: 0px;
-                                        width: 0px;
-                                    }
-                                    QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
-                                        background: none;
-                                    }
-                                    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                                        background: none;
-                                    }
-                                """)
-            elif page_index == 1:
-                self.startup_checkbox.set_circle_color("#010101")
-                self.idletime_checkbox.set_circle_color("#010101")
-                self.startup.setStyleSheet(
-                    "border-radius: 10px; background-color:#171717;")
-                self.idletime.setStyleSheet(
-                    "border-radius: 10px; background-color:#171717;")
-                self.Version_2.setStyleSheet(
-                    "border-radius: 10px; background-color:#171717;")
-                self.current_version.setText(
-                    f'<span style="color: rgba(248, 248, 248, 0.5);">Current app version: </span>'
-                    f'<span style="color: white;">2.0.0_beta</span>'
-                )
-            elif page_index == 2:
-                self.Schedule_enabler_checkbox.set_circle_color("#010101")
-                self.Schedule_enabler.setStyleSheet(
-                    f"""
-                            border-top-left-radius: 10px;
-                            border-top-right-radius: 10px;
-                            border-bottom-left-radius: 0px;
-                            border-bottom-right-radius: 0px;
-                            background-color:#171717;
-                            """)
-                self.day_widget.setStyleSheet(f""".QWidget {{
-                                border-top-left-radius: 0px;
-                                border-top-right-radius: 0px;
-                                border-bottom-left-radius: 10px;
-                                border-bottom-right-radius: 10px;  background-color: #171717;
-                                }}
-                            """)
-            elif page_index == 3:
-                self.profile_container.setStyleSheet(
-                    "border-radius: 10px; background-color:#171717;")
-                self.profile_image.setFixedSize(100, 100)
-                # user_img = os.path.join(folder_path, "user_img.svg")
-                self.profile_image.setStyleSheet(f"""
-                            border-radius: 50%;
-                            background-color: rgba(1, 1, 1, 1);  /* Transparent background */
-                            background-position: center; /* Center the image */
-                            background-repeat: no-repeat; /* Do not repeat the image */
-                        """)
-                # Update for Accessibility Permission page (if any specific styles needed)
+    def apply_styles_for_page(self, page_index, date_background, scroll_background, version_text_color, checkbox_color):
+        """Apply styles based on the current page index and theme colors."""
+        # Apply new styles
+        if page_index == 0 or page_index == -1:
+            self.Date_display.setStyleSheet("")
+            self.scrollArea.setStyleSheet("")
+            self.Day.setStyleSheet("")
 
-def credentials():
-    if not cached_credentials:
-        creds = cache_user_credentials("SD_KEYS")
-        return creds
-    else:
-        return cached_credentials
+            self.Date_display.setStyleSheet(f"""
+                background-color: {date_background};
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+                border-bottom-left-radius: 0px;
+                border-bottom-right-radius: 0px;
+            """)
+            self.scrollArea.setStyleSheet(f"""
+                border: None;
+                background-color: {scroll_background};
+                border-bottom-left-radius: 10px;
+                border-bottom-right-radius: 10px;
+            """)
+            self.Day.setStyleSheet("background: transparent;")
+            self.scrollArea.verticalScrollBar().setStyleSheet(f"""
+                QScrollBar:vertical {{
+                    background: {scroll_background};
+                    width: 5px;
+                    margin: 0px 0px 0px 0px;
+                    border-radius: 5px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: #B0B0B0;
+                    min-height: 20px;
+                    border-radius: 5px;
+                }}
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                    height: 0px;
+                    width: 0px;
+                }}
+                QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {{
+                    background: none;
+                }}
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                    background: none;
+                }}
+            """)
+        elif page_index == 1:
+            self.GeneralSettings_header.setStyleSheet("")
+            self.startup.setStyleSheet("")
+            self.idletime.setStyleSheet("")
+            self.Version_2.setStyleSheet("")
+
+            self.GeneralSettings_header.setStyleSheet(f"background-color: {checkbox_color};")
+            self.startup_checkbox.set_circle_color(checkbox_color)
+            self.idletime_checkbox.set_circle_color(checkbox_color)
+            self.startup.setStyleSheet(f"border-radius: 10px; background-color: {scroll_background};")
+            self.idletime.setStyleSheet(f"border-radius: 10px; background-color: {scroll_background};")
+            self.Version_2.setStyleSheet(f"border-radius: 10px; background-color: {scroll_background};")
+            self.current_version.setText(
+                f'<span style="color: rgba(71, 75, 79, 1);">Current app version: </span>'
+                f'<span style="color: {version_text_color}; background:transparent;">2.0.0_beta</span>'
+            )
+        elif page_index == 2:
+
+            self.Schedule_enabler.setStyleSheet("")
+            self.day_widget.setStyleSheet("")
+
+
+            self.Schedule_enabler.setStyleSheet(f"""
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+                border-bottom-left-radius: 0px;
+                border-bottom-right-radius: 0px;
+                background-color: {scroll_background};
+            """)
+            self.day_widget.setStyleSheet(f"""
+                .QWidget {{
+                    border-top-left-radius: 0px;
+                    border-top-right-radius: 0px;
+                    border-bottom-left-radius: 10px;
+                    border-bottom-right-radius: 10px;
+                    background-color: {scroll_background};
+                }}
+            """)
+        elif page_index == 3:
+            self.profile_container.setStyleSheet("")
+            self.profile_image.setStyleSheet("")
+
+
+            self.profile_container.setStyleSheet(f"border-radius: 10px; background-color: {scroll_background};")
+            self.profile_image.setFixedSize(100, 100)
+            self.profile_image.setStyleSheet(f"""
+                border-radius: 50%;
+                background-color: {scroll_background};
+                background-position: center;
+                background-repeat: no-repeat;
+            """)
+
+
 
