@@ -1,27 +1,53 @@
+import os
 import sys
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QCheckBox
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
+from sd_qt.sd_desktop.ThemeManager import ThemeManager
+
+
+base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+resources_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+
+darkTheme = os.path.join(resources_path, "DarkTheme")
+lightTheme = os.path.join(resources_path, "LightTheme")
+
+
+
 class CustomCheckBox(QCheckBox):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setFixedSize(22, 22)
+        self.theme_manager = ThemeManager()
+        self.theme_manager.theme_Changed.connect(self.change_theme)
         self.tick_icon = None  # Placeholder for tick icon
         self.unchecked_icon = None  # Placeholder for unchecked icon
 
         # Initialize with default stylesheet
+        self.change_theme()
+
+    def change_theme(self):
+        # Set the icons based on the current theme
+        if self.theme_manager.get_theme() == "dark":
+            self.tick_icon = os.path.join(darkTheme, 'checkedbox.svg')
+            self.unchecked_icon = os.path.join(darkTheme, 'uncheckedbox.svg')
+        else:
+            self.tick_icon = os.path.join(lightTheme, 'checkedbox.svg')
+            self.unchecked_icon = os.path.join(lightTheme, 'uncheckedbox.svg')
+
+        # Update stylesheet to apply new icons
         self.updateStyleSheet()
 
     def updateStyleSheet(self):
-        """Update the stylesheet with provided image paths."""
+        """Apply icons in stylesheet dynamically."""
         tick_icon_path = f"url('{self.tick_icon}')" if self.tick_icon else ""
         unchecked_icon_path = f"url('{self.unchecked_icon}')" if self.unchecked_icon else ""
 
         self.setStyleSheet(f"""
             QCheckBox {{
-                background: none;  /* Hide default checkbox background */
-                border: none;  /* Hide default checkbox border */
+                background: none;
+                border: none;
                 width: 22px;
                 height: 22px;
             }}
@@ -30,22 +56,14 @@ class CustomCheckBox(QCheckBox):
                 height: 22px;
             }}
             QCheckBox::indicator:checked {{
-                image: {tick_icon_path}; /* Set the tick image */
+                image: {tick_icon_path};
             }}
             QCheckBox::indicator:unchecked {{
-                image: {unchecked_icon_path}; /* Set the unchecked image */
+                image: {unchecked_icon_path};
             }}
         """)
 
-    def setTickImage(self, image_path: str):
-        """Set the tick image dynamically."""
-        self.tick_icon = image_path
-        self.updateStyleSheet()
 
-    def setUncheckedImage(self, image_path: str):
-        """Set the unchecked image dynamically."""
-        self.unchecked_icon = image_path
-        self.updateStyleSheet()
 
 class MainWindow(QWidget):
     def __init__(self):
