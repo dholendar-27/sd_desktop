@@ -15,8 +15,13 @@ from sd_qt.sd_desktop.ThemeManager import ThemeManager
 from sd_qt.sd_desktop.util import credentials
 
 # Define paths
-base_path = os.path.abspath(os.path.join(__file__, "../../.."))
-resources_path = os.path.join(base_path, "sd_desktop", "resources")
+development = 1
+if development == 0:
+    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+    resources_path = os.path.join(base_path, "sd_qt","sd_desktop", "resources")
+else:
+    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+    resources_path = os.path.join(base_path, "sd_desktop", "resources")
 
 darkTheme = os.path.join(resources_path, "DarkTheme")
 lightTheme = os.path.join(resources_path, "LightTheme")
@@ -119,7 +124,9 @@ class SignIn(QWidget):
     def apply_background_image(self):
         # Select background image based on current theme
         if self.theme_manager.get_theme() == "dark":
-            self.background_image = os.path.join(darkTheme, "background.svg")
+            self.background_image = os.path.join(darkTheme, "background.svg").replace("\\","/")
+            if sys.platform == "darwin":
+                self.background_image = os.path.join(darkTheme, "background.svg")
             sundial_logo = os.path.join(darkTheme, "loader_sundial_logo.svg")
             homepage_subtitle = os.path.join(darkTheme, "signin_subtitle.svg")
             homepage_SundialLogo = os.path.join(darkTheme, "dark_des_logo.svg")
@@ -134,7 +141,9 @@ class SignIn(QWidget):
             company_SundialLogo = os.path.join(darkTheme, "dark_signin_logo.svg")
             forgot_password_color = "#F8F8F8"
         else:
-            self.background_image = os.path.join(lightTheme, "background.svg")
+            self.background_image = os.path.join(lightTheme, "background.svg").replace("\\","/")
+            if sys.platform == "darwin":
+                self.background_image = os.path.join(lightTheme, "background.svg")
             sundial_logo = os.path.join(lightTheme, "loader_sundial_logo.svg")
             homepage_subtitle = os.path.join(lightTheme, "signin_subtitle.svg")
             homepage_SundialLogo = os.path.join(lightTheme, "description_logo.svg")
@@ -393,7 +402,7 @@ class SignInPage(QWidget):
         # Centered loader animation
         self.loading_animation = QLabel(self.loader_overlay)
         self.loading_animation.setStyleSheet("background:none")
-        self.loading_animation.setGeometry((800 // 2) - 50, (600 // 2) - 50, 100, 100)  # Centered position
+        self.loading_animation.setGeometry((800 // 2) - 50, (600 // 2) - 50, 50, 50)  # Centered position
         self.loading_animation.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.loading_movie = QMovie(os.path.join(resources_path,"loader.gif"))  # Replace with the actual path to your GIF
         self.loading_animation.setMovie(self.loading_movie)
@@ -622,7 +631,7 @@ class CompanyPage(QWidget):
         # Centered loader animation
         self.loading_animation = QLabel(self.loader_overlay)
         self.loading_animation.setStyleSheet("background:none")
-        self.loading_animation.setGeometry((800 // 2) - 50, (600 // 2) - 50, 100, 100)  # Centered position
+        self.loading_animation.setGeometry((800 // 2) - 50, (600 // 2) - 50, 50, 50)  # Centered position
         self.loading_animation.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.loading_movie = QMovie(os.path.join(resources_path,"loader.gif"))  # Replace with the actual path to your GIF
         self.loading_animation.setMovie(self.loading_movie)

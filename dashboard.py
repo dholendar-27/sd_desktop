@@ -21,8 +21,13 @@ from sd_qt.sd_desktop.checkBox import CustomCheckBox
 from sd_qt.sd_desktop.toggleSwitch import SwitchControl
 from sd_qt.sd_desktop.util import retrieve_settings, credentials, add_settings, get_events
 
-base_path = os.path.abspath(os.path.join(__file__, "../../.."))
-resources_path = os.path.join(base_path, "sd_desktop", "resources")
+development = 1
+if development == 0:
+    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+    resources_path = os.path.join(base_path, "sd_qt","sd_desktop", "resources")
+else:
+    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+    resources_path = os.path.join(base_path, "sd_desktop", "resources")
 
 darkTheme = os.path.join(resources_path, "DarkTheme")
 lightTheme = os.path.join(resources_path, "LightTheme")
@@ -293,6 +298,10 @@ class Dashboard(QWidget):
         return "#FFFFFF", os.path.join(lightTheme, "Sundial_homepage.svg")
 
     def getThemeSettings(self, theme, page_type):
+        if sys.platform == "darwin":
+           usr_image =  os.path.join(darkTheme, "TTim_user.svg") if theme == "dark" else os.path.join(lightTheme,"TTim_user.svg")
+        else:
+            usr_image =  os.path.join(darkTheme, "TTim_user.svg").replace("\\","/") if theme == "dark" else os.path.join(lightTheme,"TTim_user.svg").replace("\\","/")
         common_settings = {
             "date_background": "#171717" if theme == "dark" else "#EFEFEF",
             "container_background": "#171717" if theme == "dark" else "#F9F9F9",
@@ -301,7 +310,7 @@ class Dashboard(QWidget):
             "checkbox_color": "#010101" if theme == "dark" else "#FFFFFF",
             "info_icon": os.path.join(darkTheme, "info_icon.svg") if theme == "dark" else os.path.join(lightTheme,
                                                                                                        "info.svg"),
-            "user_profile" : os.path.join(darkTheme, "TTim_user.svg") if theme == "dark" else os.path.join(lightTheme,"TTim_user.svg")
+            "user_profile" : usr_image
         }
         page_specific_settings = {
             "ActivitiesPage": common_settings,
@@ -362,6 +371,7 @@ class ActivitiesPage(QWidget):
         self.scrollAreaWidgetContents.setGeometry(0, 0, 560, 460)
         self.main_layout = QVBoxLayout(self.scrollAreaWidgetContents)
         self.main_layout.setContentsMargins(12, 5, 10, 5)
+        self.main_layout.setAlignment(Qt.AlignTop)
         # self.main_layout.setSpacing(10)
         self.scrollArea.setWidget(self.scrollAreaWidgetContents)
 
@@ -506,10 +516,13 @@ class GeneralSettingsWidget(QWidget):
     def __init__(self):
         super().__init__()
 
+        self.is_loading = False  # Flag to prevent API calls during settings loading
+
+        # Initialize UI elements
         self.GeneralSettings_header = TransparentLabel(parent=self)
         self.GeneralSettings_header.setGeometry(QRect(10, 15, 300, 44))
-        font = QtGui.QFont()
-        font.setWeight(QtGui.QFont.Weight.Bold)
+        font = QFont()
+        font.setWeight(QFont.Weight.Bold)
         font.setPointSize(20 if sys.platform == "darwin" else 16)
         self.GeneralSettings_header.setFont(font)
         self.GeneralSettings_header.setText("General settings")
@@ -518,33 +531,32 @@ class GeneralSettingsWidget(QWidget):
         self._setup_startup_section()
         self._setup_idletime_section()
         self._setup_version_section()
+
+    def showEvent(self, event):
+        super().showEvent(event)  # Call the base class implementation
         self.load_settings()
 
     def load_settings(self):
+        self.is_loading = True  # Prevent API calls during loading
+
         settings = retrieve_settings()
+
+        print("launch_on_start", settings)
 
         # Check if settings were retrieved correctly
         if not isinstance(settings, dict):
             print("Error: Settings data is not a dictionary.")
+            self.is_loading = False  # End loading
             return
 
-        try:
-            # Disconnect signals temporarily
-            self.startup_checkbox.stateChanged.disconnect(self._on_startup_status_change)
-            self.idletime_checkbox.stateChanged.disconnect(self._on_idletime_status_change)
+        # Set the initial state of the checkboxes based on settings
+        launch_on_start = settings.get('launch', False)
+        idle_time = settings.get('idle_time', False)
 
-            # Set the initial state
-            self.startup_checkbox.setChecked(settings.get('launch', False))
-            self.idletime_checkbox.setChecked(settings.get('idle_time', False))
+        self.startup_checkbox.setChecked(launch_on_start)
+        self.idletime_checkbox.setChecked(idle_time)
 
-        except TypeError:
-            # Handle cases where disconnect might raise an error if the signal was not connected
-            pass
-
-        finally:
-            # Reconnect the signals
-            self.startup_checkbox.stateChanged.connect(lambda: threading.Thread(target=self._on_startup_status_change).start())
-            self.idletime_checkbox.stateChanged.connect(lambda:  threading.Thread(target=self._on_idletime_status_change).start())
+        self.is_loading = False  # End loading
 
     def _setup_startup_section(self):
         self.startup = QWidget(parent=self)
@@ -554,7 +566,7 @@ class GeneralSettingsWidget(QWidget):
         self.startup_label = TransparentLabel(parent=self.startup)
         self.startup_label.setGeometry(QRect(20, 30, 300, 16))
         self.startup_label.setText("Launch Sundial on system startup")
-        font = QtGui.QFont()
+        font = QFont()
         font.setPointSize(14 if sys.platform == "darwin" else 10)
         self.startup_label.setFont(font)
 
@@ -567,7 +579,7 @@ class GeneralSettingsWidget(QWidget):
             animation_duration=300
         )
         self.startup_checkbox.setGeometry(QRect(490, 30, 80, 21))
-        self.startup_checkbox.stateChanged.connect(self._on_startup_status_change)
+        self.startup_checkbox.stateChanged.connect(lambda: threading.Thread(target=self._update_startup_status).start())
 
     def _setup_idletime_section(self):
         self.idletime = QWidget(parent=self)
@@ -577,7 +589,7 @@ class GeneralSettingsWidget(QWidget):
         self.idletime_label = TransparentLabel(parent=self.idletime)
         self.idletime_label.setGeometry(QRect(20, 30, 211, 16))
         self.idletime_label.setText("Enable idle time detection")
-        font = QtGui.QFont()
+        font = QFont()
         font.setPointSize(14 if sys.platform == "darwin" else 10)
         self.idletime_label.setFont(font)
 
@@ -590,7 +602,7 @@ class GeneralSettingsWidget(QWidget):
             animation_duration=300
         )
         self.idletime_checkbox.setGeometry(QRect(490, 30, 100, 21))
-        self.idletime_checkbox.stateChanged.connect(self._on_idletime_status_change)
+        self.idletime_checkbox.stateChanged.connect(lambda: threading.Thread(target=self._update_idletime_status).start())
 
     def _setup_version_section(self):
         self.Version_2 = QWidget(parent=self)
@@ -634,34 +646,27 @@ class GeneralSettingsWidget(QWidget):
         self.toast_animation.setEndValue(QRect(220, 520, 350, 60))
         self.toast_animation.setEasingCurve(QtCore.QEasingCurve.OutBounce)
 
-    def show_toast_message(self, message):
-        self.startup_toast_label.setText(message)
-        self.startup_toast_message.setVisible(True)
-        self.toast_animation.start()
-        QTimer.singleShot(3000, self.hide_toast_message)
+    def _on_startup_checkbox_changed(self, state):
+        if self.is_loading:
+            return  # Prevent API call while loading settings
 
-    def hide_toast_message(self):
-        self.startup_toast_message.setVisible(False)
+        self._update_startup_status()
 
-    def _on_startup_status_change(self):
-        status = "start" if self.startup_checkbox.isChecked() else "stop"
-        self._update_startup_status(status)
+    def _on_idletime_checkbox_changed(self, state):
+        if self.is_loading:
+            return  # Prevent API call while loading settings
 
-    def _on_idletime_status_change(self):
-        status = "start" if self.idletime_checkbox.isChecked() else "stop"
-        self._update_idletime_status(status)
+        self._update_idletime_status()
 
-    def _update_startup_status(self, status):
-        params = {"status": status}
-        creds = credentials()
-        if creds and "token" in creds:
-            self._send_request("/0/launchOnStart", creds["token"], params)
+    def _update_startup_status(self):
+        status= True if self.startup_checkbox.isChecked() else False
+        add_settings("launch",status)
+            
 
-    def _update_idletime_status(self, status):
-        params = {"status": status}
-        creds = credentials()
-        if creds and "token" in creds:
-            self._send_request("/0/idletime", creds["token"], params)
+    def _update_idletime_status(self):
+        status= True if self.idletime_checkbox.isChecked() else False
+        add_settings("idle_time",status)            
+
 
     def _send_request(self, endpoint, token, params):
         try:

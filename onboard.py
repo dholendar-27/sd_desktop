@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 
 import requests
 from PySide6.QtGui import QFont, QPixmap
@@ -9,10 +10,15 @@ from PySide6 import QtGui, QtCore
 
 from sd_qt.sd_desktop.ThemeManager import ThemeManager
 from sd_qt.sd_desktop.toggleSwitch import SwitchControl
-from sd_qt.sd_desktop.util import retrieve_settings, credentials
+from sd_qt.sd_desktop.util import add_settings, retrieve_settings, credentials
 
-base_path = os.path.abspath(os.path.join(__file__, "../../.."))
-resources_path = os.path.join(base_path, "sd_desktop", "resources")
+development = 1
+if development == 0:
+    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+    resources_path = os.path.join(base_path, "sd_qt","sd_desktop", "resources")
+else:
+    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+    resources_path = os.path.join(base_path, "sd_desktop", "resources")
 
 darkTheme = os.path.join(resources_path, "DarkTheme")
 lightTheme = os.path.join(resources_path, "LightTheme")
@@ -112,7 +118,9 @@ class Onboarding(QWidget):
                                         background-color: rgba(10, 10, 10, 0.8);  /* 80% opacity */
                                         border-radius: 5px;
                                     """
-            self.background_image = os.path.join(darkTheme, "background.svg")
+            self.background_image = os.path.join(darkTheme, "background.svg").replace("\\","/")
+            if sys.platform == "darwin":
+                self.background_image = os.path.join(darkTheme, "background.svg")
             privacy_image = QPixmap(os.path.join(darkTheme, "privacy.png"))
             sundial_logo = QPixmap(os.path.join(darkTheme, "dark_signin_logo.svg"))
             data_security_img = QPixmap(os.path.join(darkTheme, "Dataprivacy.svg"))
@@ -134,7 +142,9 @@ class Onboarding(QWidget):
                                                 color: #FFFFFF;
                                             """
 
-            self.background_image = os.path.join(lightTheme, "background.svg")
+            self.background_image = os.path.join(lightTheme, "background.svg").replace("\\","/")
+            if sys.platform == "darwin":
+                self.background_image = os.path.join(lightTheme, "background.svg")
             privacy_image = QPixmap(os.path.join(lightTheme, "privacy.png"))
             sundial_logo = QPixmap(os.path.join(lightTheme, "signin_logo.svg"))
             data_security_img = QPixmap(os.path.join(lightTheme, "Dataprivacy_light.svg"))
@@ -389,8 +399,8 @@ class OnboardSettings(QWidget):
 
         self.update_checkboxes()
 
-        self.start_up_checkbox.stateChanged.connect(self.start_up_status)
-        self.idle_time_checkbox.stateChanged.connect(self.idle_time_status)
+        self.start_up_checkbox.stateChanged.connect(lambda: threading.Thread(target=self.start_up_status).start())
+        self.idle_time_checkbox.stateChanged.connect(lambda:threading.Thread(target=self.idle_time_status).start())
 
     def change_theme(self, theme_settings):
         self.idle_time.setStyleSheet(theme_settings.get('container_style'))
@@ -411,32 +421,23 @@ class OnboardSettings(QWidget):
         self.idle_time_checkbox.setChecked(settings.get('idle_time', False))
 
         # Reconnect signals after setting the checkbox states
-        self.start_up_checkbox.stateChanged.connect(self.start_up_status)
-        self.idle_time_checkbox.stateChanged.connect(self.idle_time_status)
+        self.start_up_checkbox.stateChanged.connect(lambda: threading.Thread(target=self.start_up_status).start())
+        self.idle_time_checkbox.stateChanged.connect(lambda:threading.Thread(target=self.idle_time_status).start())
+
 
     def idle_time_status(self):
-        status = "start" if self.idle_time_checkbox.isChecked() else "stop"
+        status = True if self.idle_time_checkbox.isChecked() else False
         self.enable_idletime(status)
 
     def start_up_status(self):
-        status = "start" if self.start_up_checkbox.isChecked() else "stop"
+        status = True if self.start_up_checkbox.isChecked() else False
         self.launch_on_start(status)
 
     def enable_idletime(self, status):
-        params = {"status": status}
-        creds = credentials()
-
-        if creds and "token" in creds:
-            sundial_token = creds["token"]
-            self.send_request_in_thread(f"{self.host}/0/idletime", sundial_token, params)
+        add_settings("idle_time",status)
 
     def launch_on_start(self, status):
-        params = {"status": status}
-        creds = credentials()
-
-        if creds and "token" in creds:
-            sundial_token = creds["token"]
-            self.send_request_in_thread(f"{self.host}/0/launchOnStart", sundial_token, params)
+        add_settings("launch",status)
 
     def send_request(self, url, token, params):
         try:
@@ -449,9 +450,6 @@ class OnboardSettings(QWidget):
             print(f"An error occurred while sending the request: {e}")
 
     # Function to send requests in a background thread
-    def send_request_in_thread(self, url, token, params):
-        request_thread = RequestThread(url, token, params)
-        request_thread.start()
 
 # Define the RequestThread class for background execution
 class RequestThread(QThread):

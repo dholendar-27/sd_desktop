@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QMainWindow, QApplication, QWidget, QStackedWidget
 from PySide6.QtGui import QIcon, QSurfaceFormat, QAction
 from sd_qt.sd_desktop.ThemeManager import ThemeManager
 from sd_core.cache import add_password
-from sd_qt.sd_desktop.Dashboard import Dashboard
+from sd_qt.sd_desktop.dashboard import Dashboard
 from sd_qt.sd_desktop.onboard import Onboarding
 from sd_qt.sd_desktop.signin import SignIn
 from sd_qt.sd_desktop.util import credentials
@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
         onboarding_status = self.settings.value("onboarding_complete", "")
 
         if onboarding_status == "j?KEgMKb:^kNMpX:Bx=7s":
-            # Show the main app screen
+            # Onboarding complete, show main app
             if not self.main_app_widget:
                 self.main_app_widget = Dashboard(self.sign_out)
                 self.stack.addWidget(self.main_app_widget)
@@ -89,7 +89,9 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentWidget(self.main_app_widget)
             self.main_app_widget.theme_manager.theme_Changed.connect(self.apply_theme)
         else:
+            # Onboarding not complete, show onboarding
             self.stack.setCurrentWidget(self.onboard_widget)
+
 
     def on_sign_in_completed(self):
         """Called after the sign-in is completed."""
@@ -106,28 +108,43 @@ class MainWindow(QMainWindow):
 
     def on_onboarding_completed(self):
         """Called after the onboarding is completed."""
+        # Mark onboarding as complete
         self.settings.setValue("onboarding_complete", "j?KEgMKb:^kNMpX:Bx=7s")
         self.settings.sync()
+
+        # Navigate to the next screen after onboarding
         self.onboard_navigate.emit()
 
+        # Clean up the onboarding widget
         if self.onboard_widget:
             self.stack.removeWidget(self.onboard_widget)
             self.onboard_widget.deleteLater()
             self.onboard_widget = None
 
+
     def view_stack(self):
-        """Determine the initial screen based on credentials."""
+        """Determine the initial screen based on credentials and onboarding status."""
         creds = credentials()
         if creds and creds.get('Sundial'):
-            if not self.main_app_widget:
-                self.main_app_widget = Dashboard(self.sign_out)
-                self.stack.addWidget(self.main_app_widget)
-            self.stack.setCurrentWidget(self.main_app_widget)
+            # If credentials exist, check if onboarding is complete
+            onboarding_status = self.settings.value("onboarding_complete", "")
+
+            if onboarding_status == "j?KEgMKb:^kNMpX:Bx=7s":
+                # Onboarding is complete, proceed to main app
+                if not self.main_app_widget:
+                    self.main_app_widget = Dashboard(self.sign_out)
+                    self.stack.addWidget(self.main_app_widget)
+                self.stack.setCurrentWidget(self.main_app_widget)
+            else:
+                # Onboarding is not complete, show onboarding
+                self.stack.setCurrentWidget(self.onboard_widget)
         else:
+            # No credentials, show sign-in
             if not self.sign_in_widget:
                 self.sign_in_widget = SignIn(self.on_sign_in_completed)
                 self.stack.addWidget(self.sign_in_widget)
             self.stack.setCurrentWidget(self.sign_in_widget)
+
 
     def sign_out(self):
         """Sign out the user and return to the sign-in screen."""
@@ -141,7 +158,6 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(self.sign_in_widget)
 
         self.stack.setCurrentWidget(self.sign_in_widget)
-        self.settings.setValue("onboarding_complete", "")
 
         if self.main_app_widget:
             self.stack.removeWidget(self.main_app_widget)
@@ -249,6 +265,7 @@ class MainWindow(QMainWindow):
             else:
                 self.setStyleSheet("background-color: lightgray;")
         super(MainWindow, self).changeEvent(event)
+
 
 
 def run_application():
