@@ -30,6 +30,7 @@ user_details = {
 
 }
 
+CACHE_KEY = "Sundial"
 class TransparentLabel(QLabel):
 
     def __init__(self, *args, **kwargs):
@@ -481,10 +482,10 @@ class SignInPage(QWidget):
                 response_data = response.json()
                 if response_data["code"] == "UASI0011":
                     self.sundail_token = response_data['data']['token']
-                    clear_credentials("SD_KEYS")
+                    clear_credentials(CACHE_KEY)
                     cached_credentials = credentials()
                     cached_credentials['Sundial'] = True
-                    add_password("SD_KEYS", json.dumps(cached_credentials))
+                    add_password(CACHE_KEY, json.dumps(cached_credentials))
                     self.move_on.emit()
                     self.stop_loader()  # Stop the loader if the login is successful
                 elif response_data["code"] == "RCW00001":
@@ -729,10 +730,10 @@ class CompanyPage(QWidget):
                 response_data = response.json()
                 if response_data["code"] == "UASI0011":
                     self.sundail_token = response_data['data']['token']
-                    clear_credentials("SD_KEYS")
+                    clear_credentials(CACHE_KEY)
                     cached_credentials = credentials()
                     cached_credentials['Sundial'] = True
-                    add_password("SD_KEYS", json.dumps(cached_credentials))
+                    add_password(CACHE_KEY, json.dumps(cached_credentials))
                     self.move_on.emit()
                 else:
                     self.stop_loader()

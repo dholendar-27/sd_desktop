@@ -5,6 +5,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QSettings, Signal, QCoreApplication, QEvent,QDir
 from PySide6.QtWidgets import QMainWindow, QApplication, QWidget, QStackedWidget, QSystemTrayIcon, QMenu
 from PySide6.QtGui import QIcon, QSurfaceFormat, QAction
+
+from sd_qt.keychain_script import CACHE_KEY
 from sd_qt.sd_desktop.ThemeManager import ThemeManager
 from sd_core.cache import add_password
 from sd_qt.sd_desktop.dashboard import Dashboard
@@ -15,6 +17,7 @@ from sd_qt.sd_desktop.util import credentials
 if sys.platform == "darwin":
     from AppKit import NSApplication, NSApp, NSApplicationActivationPolicyAccessory, NSApplicationActivationPolicyRegular
 
+CACHE_KEY = "Sundial"
 
 class MainWindow(QMainWindow):
     onboard_navigate = Signal()  # Signal to trigger navigation check
@@ -151,7 +154,7 @@ class MainWindow(QMainWindow):
         cached_creds = credentials()
         if cached_creds:
             cached_creds['Authenticated'] = False
-            add_password("SD_KEYS", json.dumps(cached_creds))
+            add_password(CACHE_KEY, json.dumps(cached_creds))
 
         if not self.sign_in_widget:
             self.sign_in_widget = SignIn(self.on_sign_in_completed)
