@@ -12,16 +12,25 @@ from sd_qt.sd_desktop.ThemeManager import ThemeManager
 from sd_qt.sd_desktop.toggleSwitch import SwitchControl
 from sd_qt.sd_desktop.util import add_settings, retrieve_settings, credentials
 
-development = 1
-if development == 0:
-    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
-    resources_path = os.path.join(base_path, "sd_qt","sd_desktop", "resources")
+development = True
+if development:
+    if sys.platform == "darwin":
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+    else:
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
 else:
-    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
-    resources_path = os.path.join(base_path, "sd_desktop", "resources")
+    if sys.platform == "darwin":
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+    else:
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_desktop", "resources")
 
-darkTheme = os.path.join(resources_path, "DarkTheme")
-lightTheme = os.path.join(resources_path, "LightTheme")
+darkTheme = os.path.join(resource_path, "DarkTheme")
+lightTheme = os.path.join(resource_path, "LightTheme")
+
 
 
 class TransparentLabel(QLabel):

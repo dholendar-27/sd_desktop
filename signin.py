@@ -13,18 +13,26 @@ from PySide6.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QApplication
 from sd_core.cache import clear_credentials, add_password
 from sd_qt.sd_desktop.ThemeManager import ThemeManager
 from sd_qt.sd_desktop.util import credentials
-
 # Define paths
-development = 1
-if development == 0:
-    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
-    resources_path = os.path.join(base_path, "sd_qt","sd_desktop", "resources")
-else:
-    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
-    resources_path = os.path.join(base_path, "sd_desktop", "resources")
 
-darkTheme = os.path.join(resources_path, "DarkTheme")
-lightTheme = os.path.join(resources_path, "LightTheme")
+development = True
+if development:
+    if sys.platform == "darwin":
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+    else:
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+else:
+    if sys.platform == "darwin":
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+    else:
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_desktop", "resources")
+
+darkTheme = os.path.join(resource_path, "DarkTheme")
+lightTheme = os.path.join(resource_path, "LightTheme")
 
 user_details = {
 
@@ -405,7 +413,7 @@ class SignInPage(QWidget):
         self.loading_animation.setStyleSheet("background:none")
         self.loading_animation.setGeometry((800 // 2) - 50, (600 // 2) - 50, 50, 50)  # Centered position
         self.loading_animation.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.loading_movie = QMovie(os.path.join(resources_path,"loader.gif"))  # Replace with the actual path to your GIF
+        self.loading_movie = QMovie(os.path.join(resource_path,"loader.gif"))  # Replace with the actual path to your GIF
         self.loading_animation.setMovie(self.loading_movie)
         self.loading_animation.setScaledContents(True)
 
@@ -634,7 +642,7 @@ class CompanyPage(QWidget):
         self.loading_animation.setStyleSheet("background:none")
         self.loading_animation.setGeometry((800 // 2) - 50, (600 // 2) - 50, 50, 50)  # Centered position
         self.loading_animation.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.loading_movie = QMovie(os.path.join(resources_path,"loader.gif"))  # Replace with the actual path to your GIF
+        self.loading_movie = QMovie(os.path.join(resource_path,"loader.gif"))  # Replace with the actual path to your GIF
         self.loading_animation.setMovie(self.loading_movie)
 
     def start_loader(self):

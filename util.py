@@ -1,9 +1,12 @@
 import json
+import os
+import sys
 from datetime import datetime
 import pytz
 import requests
 from cachetools import LRUCache
 from sd_core.cache import cache_user_credentials
+import configparser
 
 host = "http://localhost:7600/api"
 
@@ -16,6 +19,17 @@ cache_key = "settings"
 def credentials():
     creds = cache_user_credentials("Sundial")
     return creds
+
+def clear_cache():
+    """
+    Clears both the general cache and the events cache.
+    """
+    try:
+        cache.clear()
+        events_cache.clear()
+        print("Cache cleared successfully.")
+    except Exception as e:
+        print(f"An error occurred while clearing the cache: {e}")
 
 
 def get_events():
@@ -135,3 +149,37 @@ def retrieve_settings():
         except:
             settings = {}
         return settings
+
+
+def read_config():
+    config = configparser.ConfigParser()
+    root_folder = os.getcwd()
+    config_path = os.path.join(root_folder, 'settings.ini')
+    print(config_path)
+
+    config.read(config_path)
+
+    # Ensure the 'settings' section and 'development' key exist before attempting to access them
+    if 'settings' in config and 'development' in config['settings']:
+        development = config.getboolean('settings', 'development')
+    else:
+        raise KeyError("Missing 'settings' section or 'development' key in the configuration file.")
+
+    return development
+
+def resource_path():
+    if read_config():
+        if sys.platform == "darwin":
+            base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+            resources_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+        else:
+            base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+            resources_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+    else:
+        if sys.platform == "darwin":
+            base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+            resources_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+        else:
+            base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+            resources_path = os.path.join(base_path, "sd_desktop", "resources")
+    return base_path, resources_path

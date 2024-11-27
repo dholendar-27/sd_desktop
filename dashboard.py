@@ -15,22 +15,33 @@ from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QVBoxLayout, QStackedWidget, QSpacerItem, \
     QSizePolicy, QButtonGroup, QGraphicsOpacityEffect, QTimeEdit, QGraphicsDropShadowEffect, QScrollArea
 from deepdiff import DeepDiff
+from dill import settings
 
 from sd_qt.sd_desktop.ThemeManager import ThemeManager
 from sd_qt.sd_desktop.checkBox import CustomCheckBox
 from sd_qt.sd_desktop.toggleSwitch import SwitchControl
 from sd_qt.sd_desktop.util import retrieve_settings, credentials, add_settings, get_events
 
-development = 1
-if development == 0:
-    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
-    resources_path = os.path.join(base_path, "sd_qt","sd_desktop", "resources")
-else:
-    base_path = os.path.abspath(os.path.join(__file__, "../../.."))
-    resources_path = os.path.join(base_path, "sd_desktop", "resources")
 
-darkTheme = os.path.join(resources_path, "DarkTheme")
-lightTheme = os.path.join(resources_path, "LightTheme")
+development = True
+if development:
+    if sys.platform == "darwin":
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+    else:
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+else:
+    if sys.platform == "darwin":
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_qt", "sd_desktop", "resources")
+    else:
+        base_path = os.path.abspath(os.path.join(__file__, "../../.."))
+        resource_path = os.path.join(base_path, "sd_desktop", "resources")
+
+darkTheme = os.path.join(resource_path, "DarkTheme")
+lightTheme = os.path.join(resource_path, "LightTheme")
+
 
 host = "http://localhost:7600/api"
 
@@ -61,11 +72,14 @@ class PageLoaderRunnable(QRunnable):
 class Dashboard(QWidget):
     signout_signal = Signal()
 
-    def __init__(self, signout):
+    def __init__(self, signout, main_theme_changed):
         super().__init__()
         self.theme_manager = ThemeManager()
         self.theme_manager.theme_Changed.connect(self.change_theme)
+        self.main_theme_changed = main_theme_changed
         self.signout = signout
+
+        self.previous_theme = ""
 
         self.horizontalLayout = QHBoxLayout(self)
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
@@ -88,14 +102,12 @@ class Dashboard(QWidget):
         self.sidebar.setFixedSize(QSize(220, 600))
 
         self.verticalLayout_2 = QVBoxLayout(self.sidebar)
-        self.verticalLayout_2.setContentsMargins(0, 20, 0, 0)
+        self.verticalLayout_2.setContentsMargins(0, 15, 0, 0)
 
-        # Logo Widget
-        self.AppLogo = QSvgWidget(parent=self.sidebar)
-        self.AppLogo.setFixedSize(QSize(200,50))
-        self.label = TransparentLabel(parent=self.AppLogo)
-        self.label.setGeometry(10, 0, 150, 50)
-        self.verticalLayout_2.addWidget(self.AppLogo)
+        self.label = QSvgWidget(parent=self)
+        self.label.setFixedSize(QSize(141,44))
+        self.label.setGeometry(10, 0, 141, 44)
+        self.verticalLayout_2.addWidget(self.label)
 
         # Top Button Widget
         self.top_buttons_widget = QWidget(parent=self.sidebar)
@@ -132,7 +144,7 @@ class Dashboard(QWidget):
         profile_button = self.createSidebarButton("Profile settings", "/light_user_icon.svg", button_height, "UserProfile",
                                                   3)
         signout_button = self.createSidebarButton("Sign out", "/signout.svg", button_height, "SignOut", -1)
-        self.change_theme_button = self.createButton("Change Theme", "", button_height)
+        self.change_theme_button = self.createButton("Change Theme", "/theme_icon.svg", button_height)
 
         self.change_theme_button.clicked.connect(self.theme_manager.switch_theme)
         signout_button.clicked.connect(self.signout)
@@ -156,7 +168,7 @@ class Dashboard(QWidget):
         if icon_path:
             icon_label = TransparentLabel(parent=button)
             icon_label.setGeometry(20, 10, 30, 22)
-            icon_label.setPixmap(QPixmap(resources_path + icon_path))
+            icon_label.setPixmap(QPixmap(resource_path + icon_path))
             icon_label.setStyleSheet("background:transparent")
 
         button.setStyleSheet(self.getButtonStyleSheet())
@@ -172,8 +184,8 @@ class Dashboard(QWidget):
         # Apply icon if provided
         if icon_path:
             icon_label = TransparentLabel(parent=button)
-            icon_label.setGeometry(20, 10, 40, 40)
-            icon_label.setPixmap(QPixmap(darkTheme + icon_path))
+            icon_label.setGeometry(20, 10, 30, 22)
+            icon_label.setPixmap(QPixmap(resource_path + icon_path))
             icon_label.setStyleSheet("background:transparent")
 
         button.setStyleSheet(self.ButtonStyleSheet())
@@ -188,7 +200,8 @@ class Dashboard(QWidget):
         return f"""
             QPushButton {{
                 border: none;
-                padding-left: 10px;
+                text-align: left;
+                padding-left:55px;
                 color: {text_color};
             }}
             QPushButton:hover {{
@@ -210,7 +223,8 @@ class Dashboard(QWidget):
         return f"""
             QPushButton {{
                 border: none;
-                padding-left: 10px;
+                text-align: left;
+                padding-left:55px;
                 color: {text_color};
             }}
         """
@@ -268,6 +282,11 @@ class Dashboard(QWidget):
 
     def change_theme(self):
         theme = self.theme_manager.get_theme()
+
+        if self.previous_theme != theme:
+            self.main_theme_changed.emit()
+            self.previous_theme = theme
+
         stacked_widget_background, app_logo = self.getThemeColors(theme)
 
         if theme == "dark":
@@ -277,9 +296,7 @@ class Dashboard(QWidget):
 
         self.stackedWidget.setStyleSheet(f"background-color: {stacked_widget_background};")
         self.sidebar.setStyleSheet(f"background-color: {stacked_widget_background};")
-        self.label.setPixmap(QPixmap(app_logo))
-        self.label.setScaledContents(True)
-        self.label.setStyleSheet("margin-top:10px")
+        self.label.load(app_logo)
 
         # Update button styles
         for button in self.button_group.buttons():
@@ -618,6 +635,7 @@ class GeneralSettingsWidget(QWidget):
         self.update_header.setText("Update")
 
         # Update description
+        font = QtGui.QFont()
         font.setPointSize(14 if sys.platform == "darwin" else 8)
         self.update_description = TransparentLabel(parent=self.Version_2)
         self.update_description.setGeometry(QRect(20, 50, 311, 16))
@@ -716,6 +734,10 @@ class SchedulePage(QWidget):
         self.setupButtons()
         self.applySettingsAndStyle()
 
+    def showEvent(self, event):
+        super().showEvent(event)  # Call the base class implementation
+        self.load_settings()
+
     def setupLabelsAndFonts(self):
         font_bold = QFont()
         font_bold.setWeight(QFont.Weight.Bold)
@@ -748,6 +770,12 @@ class SchedulePage(QWidget):
         )
         self.Schedule_enabler_checkbox.setGeometry(490, 30, 100, 21)
         self.Schedule_enabler_checkbox.stateChanged.connect(self.toggle_schedule_visibility)
+        self.load_settings()
+
+    def load_settings(self):
+        settings = retrieve_settings()
+        if settings:
+            self.Schedule_enabler_checkbox.setChecked(settings.get("schedule",False))
 
     def setupDayWidget(self):
         # Day Widget for schedule settings

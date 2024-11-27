@@ -12,7 +12,7 @@ from sd_core.cache import add_password
 from sd_qt.sd_desktop.dashboard import Dashboard
 from sd_qt.sd_desktop.onboard import Onboarding
 from sd_qt.sd_desktop.signin import SignIn
-from sd_qt.sd_desktop.util import credentials
+from sd_qt.sd_desktop.util import credentials, clear_cache
 
 if sys.platform == "darwin":
     from AppKit import NSApplication, NSApp, NSApplicationActivationPolicyAccessory, NSApplicationActivationPolicyRegular
@@ -21,6 +21,7 @@ CACHE_KEY = "Sundial"
 
 class MainWindow(QMainWindow):
     onboard_navigate = Signal()  # Signal to trigger navigation check
+    main_theme_changed = Signal()
 
     def __init__(self):
         super().__init__()
@@ -42,11 +43,9 @@ class MainWindow(QMainWindow):
         self.onboard_widget = Onboarding(self.on_onboarding_completed)
         self.main_app_widget = None  # Load lazily after onboarding or sign-in
 
-        self.sign_in_widget.theme_manager.theme_Changed.connect(self.apply_theme)
-        self.onboard_widget.theme_manager.theme_Changed.connect(self.apply_theme)
-
         # Connect navigate signal to navigation handler
         self.onboard_navigate.connect(self.handle_navigation)
+        self.main_theme_changed.connect(self.apply_theme)
 
         # Add widgets to the stack
         self.stack.addWidget(self.sign_in_widget)
@@ -72,7 +71,7 @@ class MainWindow(QMainWindow):
 
     def set_dark_theme(self):
         """ Apply dark theme. """
-        self.setStyleSheet("background-color: #2d2d2d")
+        self.setStyleSheet("background-color: #000000")
         # Any additional style changes can go here
 
     def set_light_theme(self):
@@ -86,7 +85,7 @@ class MainWindow(QMainWindow):
         if onboarding_status == "j?KEgMKb:^kNMpX:Bx=7s":
             # Onboarding complete, show main app
             if not self.main_app_widget:
-                self.main_app_widget = Dashboard(self.sign_out)
+                self.main_app_widget = Dashboard(self.sign_out, self.main_theme_changed)
                 self.stack.addWidget(self.main_app_widget)
 
             self.stack.setCurrentWidget(self.main_app_widget)
@@ -99,7 +98,7 @@ class MainWindow(QMainWindow):
     def on_sign_in_completed(self):
         """Called after the sign-in is completed."""
         if not self.main_app_widget:
-            self.main_app_widget = Dashboard(self.sign_out)
+            self.main_app_widget = Dashboard(self.sign_out, self.main_theme_changed)
             self.stack.addWidget(self.main_app_widget)
 
         self.onboard_navigate.emit()
@@ -135,7 +134,7 @@ class MainWindow(QMainWindow):
             if onboarding_status == "j?KEgMKb:^kNMpX:Bx=7s":
                 # Onboarding is complete, proceed to main app
                 if not self.main_app_widget:
-                    self.main_app_widget = Dashboard(self.sign_out)
+                    self.main_app_widget = Dashboard(self.sign_out,self.main_theme_changed)
                     self.stack.addWidget(self.main_app_widget)
                 self.stack.setCurrentWidget(self.main_app_widget)
             else:
@@ -155,6 +154,7 @@ class MainWindow(QMainWindow):
         if cached_creds:
             cached_creds['Authenticated'] = False
             add_password(CACHE_KEY, json.dumps(cached_creds))
+            clear_cache()
 
         if not self.sign_in_widget:
             self.sign_in_widget = SignIn(self.on_sign_in_completed)
